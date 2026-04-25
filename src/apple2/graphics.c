@@ -12,14 +12,9 @@
 #include "vars.h"
 
 #define BOTTOM 175
-#define RED_VAL_1 ROP_OR(0b11010100)
-#define RED_VAL_2 ROP_OR(0b10101010)
 // Background pattern constants for checkerboard pattern
 #define EVEN_BLUE  0b11010101  // Pattern for even x coordinates
 #define ODD_BLUE   0b10101010  // Pattern for odd x coordinates
-#define ROP_WRITE_RIGHT_HALF ROP_CONST(0b11100000) 
-#define ROP_WRITE_LEFT_HALF ROP_CONST(0b1000011) 
-#define SCREEN_WIDTH 40
 
 int identify(void); 
 void setVsyncProc(int type); 
@@ -38,7 +33,6 @@ uint16_t quadrant_offset[] = {
 
  uint16_t legendShipOffset[] = {2, 1, 0, 256U * 5, 256U * 6 + 1}; 
 extern unsigned char charset[];
-#define OFFSET_Y 2
 static uint16_t currentPlayerCount = 0;
 
 // Drawer border font data (8 bytes × 8 types = 64 bytes)
@@ -123,15 +117,6 @@ void drawTextAt(unsigned char x, unsigned char y, const char*s) {
   }  
 }
 
-void clearStatusBar() {
-  //unsigned char i;
-  hires_Mask(0,175,40,17,0xa900);
-}
-
-void drawStatusTimer() {
-  hires_putcc(38,BOTTOM+5,ROP_CPY, 0x2829);
-}
-
 void drawText(unsigned char x, unsigned char y, const char* s) {
   drawTextAt(x,y * 8 - 4, s);  
 }
@@ -143,9 +128,6 @@ void resetScreen() {
 
 void drawLine(unsigned char x, unsigned char y, unsigned char w) {
    hires_Mask(x,y*8-3,w,2, 0xa9ff); 
-}
-void hideLine(unsigned char x, unsigned char y, unsigned char w) {
-   hires_Mask(x,y*8-3,w,2, 0xa900); 
 }
 
 void drawBox(unsigned char x, unsigned char y, unsigned char w, unsigned char h) {
@@ -865,10 +847,3 @@ void drawEndgameMessage(const char *message)
   
   drawTextAt(x, HEIGHT * 8 - 9, message);
 }
-/* 
-void waitvsync() {
-  static uint16_t i;
-  // Aproximate a jiffy for the timer countdown
-  for ( i=0;i<630;i++);
-}
-  */

@@ -1,5 +1,5 @@
 /*
-  Apple II Utilities - Prototype version
+  Apple II Utilities
 */
 
 #include <stdint.h>

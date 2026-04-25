@@ -1,5 +1,5 @@
 /*
-  Apple II Sound - Prototype version
+  Apple II Sound
 */
 
 #include <stdint.h>
@@ -24,21 +24,6 @@ void tone(uint16_t period, uint8_t dur, uint8_t wait) {
     for (ii=0; ii<40; ii++) ;
 }
 
-// Keeping this here in case I need it
-// void toneFinder() {
-//   clearCommonInput();
-//   while (inputKey != KEY_RETURN || i<2) {
-//     while (!kbhit());
-//     inputKey = cgetc();
-//     if (inputKey == KEY_DOWN_ARROW)
-//       i-=1;
-//     if (inputKey == KEY_UP_ARROW)
-//       i+=1;
-//       cprintf("%i ",i);
-//     tone(i,50,0,0);
-//   }
-// }
-
 void initSound() {
  
 }
@@ -60,8 +45,6 @@ void soundGameDone() {
   tone(65,20,20);
   tone(61,40,50);
 }
-
-
 
 void soundTick() {
  tone(80,2,0);
@@ -166,7 +149,6 @@ void soundSunk()
     tone(90, 40, 20);   // Low tone (sinking feeling)
     tone(100, 50, 0);   // Even lower tone
 }
-
 
 void disableKeySounds()
 {

@@ -24,3 +24,11 @@ docs/
 lib/
 mymake
 png/
+
+*.code-workspace
+
+sync-from-icloud.sh
+sync-to-icloud.sh
+verify-folder-copy.sh
+
+support/fbscfg
