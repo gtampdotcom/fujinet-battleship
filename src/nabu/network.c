@@ -1,6 +1,6 @@
 /*
  * NABU network layer -- HTTP via the NIA file store, AppKey storage
- * as local DAT files, and session ID management.
+ * as local DAT files.
  */
 
 #include "../misc.h"
@@ -14,11 +14,11 @@ extern ClientState clientState;
 
 static uint8_t io_buf[256];
 static char line_buf[96];
-static uint16_t request_counter;
-static uint16_t session_id;
+/* static uint16_t request_counter; */ /* NIA no-cache flag used instead -- was cache workaround */
+static uint16_t session_id;            /* kept -- used for random seed in util.c */
 static bool session_ready;
 
-static void ensure_session_id(void);
+/* static void ensure_session_id(void); */ /* forward decl no longer needed -- build_cache_busted_url removed */
 
 /* Trim trailing newlines. */
 static void trim_newline(char *s)
@@ -60,7 +60,7 @@ static void append_text(char *dst, const char *src, uint8_t max_len)
     dst[pos] = 0;
 }
 
-/* cache-fix unique URL -- session & request count -- 1.00.57 */
+/* NIA no-cache flag now handles caching -- workaround below kept for reference only
 static void build_cache_busted_url(const char *plain_url, char *final_url, uint8_t final_len)
 {
     copy_text(final_url, plain_url, final_len);
@@ -75,8 +75,9 @@ static void build_cache_busted_url(const char *plain_url, char *final_url, uint8
         append_text(final_url, line_buf, final_len);
     }
 }
+-- cache workaround end */
 
-/* session counter, NBSESSID.DAT -- 1.00.57 (nonce) */
+/* session counter, NBSESSID.DAT -- kept for random seed (util.c) */
 static void ensure_session_id(void)
 {
     uint8_t fh;
@@ -204,12 +205,12 @@ int16_t custom_network_call(char *url, uint8_t *buffer, uint16_t max_len)
     uint16_t got;
     uint16_t pos = 0;
     static char plain_url[160];
-    static char final_url[176];
+    /* static char final_url[176]; */ /* cache workaround removed */
 
     strip_network_prefix(url, plain_url, sizeof(plain_url));
-    build_cache_busted_url(plain_url, final_url, sizeof(final_url));
+    /* build_cache_busted_url(plain_url, final_url, sizeof(final_url)); */ /* cache workaround removed */
 
-    fh = rn_fileOpen((uint8_t)strlen(final_url), (uint8_t *)final_url, OPEN_FILE_FLAG_READONLY, 0xFF);
+    fh = rn_fileOpen((uint8_t)strlen(plain_url), (uint8_t *)plain_url, OPEN_FILE_FLAG_READONLY, 0xFF);
     if (fh == 0xFF) {
         return 0;
     }

@@ -556,6 +556,7 @@ void restoreScreenBuffer()
 /* Initialise graphics mode. */
 void initGraphics()
 {
+    vdp_clearVRAM(); /* Suggested screen corruption buster by GTAMP */
     nabu_vdp_init_cp437();
 }
 
