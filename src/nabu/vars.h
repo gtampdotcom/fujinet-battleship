@@ -5,7 +5,7 @@
  * NABU CP/M platform values for the first text-focused stage.
  */
 
-#define NABU_BATTLE_VERSION "1.00.90"  /* shown in screen corners */
+#define NABU_BATTLE_VERSION "1.00.91"  /* shown in screen corners */
 
 /* routes network and AppKey calls to NABULIB/RetroNET instead of FujiNet SIO */
 #define CUSTOM_FUJINET_CALLS

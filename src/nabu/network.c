@@ -228,6 +228,30 @@ int16_t custom_network_call(char *url, uint8_t *buffer, uint16_t max_len)
     return (int16_t)pos;
 }
 
+/* Fetch a URL into a raw buffer -- used for plain-text responses such as /tables. */
+uint16_t nabu_fetch_url(const char *url, uint8_t *buf, uint16_t max_len)
+{
+    uint8_t fh;
+    uint16_t got;
+    uint16_t pos = 0;
+
+    fh = rn_fileOpen((uint8_t)strlen(url), (uint8_t *)url, OPEN_FILE_FLAG_READONLY, 0xFF);
+    if (fh == 0xFF)
+        return 0;
+
+    while (pos < max_len) {
+        uint16_t want = (uint16_t)(max_len - pos);
+        if (want > 64) want = 64;
+        got = rn_fileHandleReadSeq(fh, buf, pos, want);
+        if (got == 0)
+            break;
+        pos = (uint16_t)(pos + got);
+    }
+
+    rn_fileHandleClose(fh);
+    return pos;
+}
+
 /* Read one local appkey value. */
 uint16_t custom_read_appkey(uint16_t creator_id, uint8_t app_id, uint8_t key_id, char *destination)
 {

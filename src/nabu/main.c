@@ -15,6 +15,8 @@ void drawGamefieldOverlay(uint8_t quadrant, uint8_t *gamefield);
 void drawIcon(uint8_t x, uint8_t y, uint8_t icon);
 void drawTextColor(uint8_t x, uint8_t y, const char *s, uint8_t fg, uint8_t bg);
 
+uint16_t nabu_fetch_url(const char *url, uint8_t *buf, uint16_t max_len); /* network.c */
+
 #define BS_EMPTY       0x80  /* blank ocean tile */
 #define BS_SUB_STERN_H 0xA8  /* submarine stern, horizontal */
 #define BS_SUB_MID_H   0xA9  /* submarine middle section, horizontal */
@@ -58,6 +60,21 @@ static uint8_t last_result_owner;             /* who caused last hit/miss/sunk *
 static uint8_t placement_initialised;         /* manual placement set up for this turn */
 static uint8_t placement_preview_pos;         /* current manual placement cursor position */
 static char ui_message[40];                   /* status line message text */
+
+/* mini-lobby: shown when no LOBBYSEL.DAT is found */
+#define ML_MAX_TABLES 10
+
+typedef struct {
+    char id[16];     /* table ID for ?table= query param */
+    char name[20];   /* friendly display name */
+    uint8_t players; /* current connected players */
+    uint8_t max;     /* max player slots */
+} TableEntry;
+
+static TableEntry ml_tables[ML_MAX_TABLES]; /* fetched table list */
+static uint8_t ml_count;                    /* number of tables parsed */
+
+static uint8_t run_mini_lobby(void);
 
 static int read_input_key(void);
 static int wait_input_key(void);
@@ -1080,6 +1097,226 @@ static void auto_place_ships(void)
     }
 }
 
+/* Extract a quoted string value from a JSON object slice.
+   Looks for "pat":"..." and copies the value into out. */
+static void ml_extract_str(const uint8_t *buf, uint16_t start, uint16_t end,
+                            const char *pat, char *out, uint8_t out_max)
+{
+    uint8_t pat_len = (uint8_t)strlen(pat);
+    uint16_t i;
+    uint8_t len;
+
+    for (i = start; i + pat_len <= end; i++) {
+        if (strncmp((const char *)buf + i, pat, pat_len) == 0) {
+            i += pat_len;
+            len = 0;
+            while (i <= end && buf[i] != '"' && len + 1 < out_max)
+                out[len++] = (char)buf[i++];
+            out[len] = 0;
+            return;
+        }
+    }
+    out[0] = 0;
+}
+
+/* Extract a numeric value from a JSON object slice.
+   Looks for "pat":N and stores the integer in *out. */
+static void ml_extract_num(const uint8_t *buf, uint16_t start, uint16_t end,
+                            const char *pat, uint8_t *out)
+{
+    uint8_t pat_len = (uint8_t)strlen(pat);
+    uint16_t i;
+    uint8_t val;
+
+    for (i = start; i + pat_len <= end; i++) {
+        if (strncmp((const char *)buf + i, pat, pat_len) == 0) {
+            i += pat_len;
+            val = 0;
+            while (i <= end && buf[i] >= '0' && buf[i] <= '9') {
+                val = (uint8_t)(val * 10 + (uint8_t)(buf[i] - '0'));
+                i++;
+            }
+            *out = val;
+            return;
+        }
+    }
+    *out = 0;
+}
+
+/* Parse the /tables JSON response into ml_tables[].
+   Each entry is a {...} object with t, n, p, m fields. */
+static void ml_parse_tables(const uint8_t *buf, uint16_t size)
+{
+    uint16_t i = 0;
+    uint16_t obj_end;
+    TableEntry *e;
+
+    ml_count = 0;
+
+    while (i < size && ml_count < ML_MAX_TABLES) {
+        while (i < size && buf[i] != '{') i++;
+        if (i >= size) break;
+
+        obj_end = (uint16_t)(i + 1);
+        while (obj_end < size && buf[obj_end] != '}') obj_end++;
+        if (obj_end >= size) break;
+
+        e = &ml_tables[ml_count];
+        ml_extract_str(buf, i, obj_end, "\"Table\":\"",      e->id,   sizeof(e->id));
+        ml_extract_str(buf, i, obj_end, "\"Name\":\"",       e->name, sizeof(e->name));
+        ml_extract_num(buf, i, obj_end, "\"Players\":",      &e->players);
+        ml_extract_num(buf, i, obj_end, "\"MaxPlayers\":",   &e->max);
+
+        if (e->id[0])
+            ml_count++;
+
+        i = (uint16_t)(obj_end + 1);
+    }
+}
+
+/* Draw the player name input field at row 8. */
+static void ml_draw_name(void)
+{
+    static char field[14]; /* "> " + 8 chars + "_" + null */
+    uint8_t len = (uint8_t)strlen(playerName);
+
+    drawSpace(2, 8, 28);
+    field[0] = '>';
+    field[1] = ' ';
+    strcpy(field + 2, playerName);
+    field[2 + len] = '_';
+    field[3 + len] = 0;
+    drawTextColor(2, 8, field, LC_FG_READY, LC_BG);
+}
+
+/* Draw the table list starting at row 8, highlighting the selected entry. */
+static void ml_draw_tables(uint8_t selected)
+{
+    uint8_t i;
+    uint8_t row;
+    static char line[30]; /* "X %-18s %2u/%-2u" = 27 chars max */
+
+    for (i = 0; i < ml_count && i < ML_MAX_TABLES; i++) {
+        row = (uint8_t)(8 + i);
+        sprintf(line, "%c %-18.18s%2u/%-2u",
+                i == selected ? '>' : ' ',
+                ml_tables[i].name,
+                (unsigned)ml_tables[i].players,
+                (unsigned)ml_tables[i].max);
+        drawText(2, row, line);
+    }
+}
+
+/* Built-in table browser and player name entry.
+   Runs when no LOBBYSEL.DAT was found (playerName empty after load_lobby_datafile).
+   Sets playerName and query on success. Returns 1 if the player joined, 0 if they quit. */
+static uint8_t run_mini_lobby(void)
+{
+    static uint8_t raw_buf[512]; /* raw /tables JSON response */
+    static char tbl_url[80];    /* serverEndpoint + "tables" */
+    uint16_t raw_size;
+    uint8_t selected = 0;
+    int key;
+    uint8_t name_len;
+
+    /* phase 1: player name entry */
+    draw_stage_screen("Enter Player Name");
+    drawTextColor(2, 10, "Return", LC_FG_KEY, LC_BG);
+    drawText(8,  10, ":confirm  ");
+    drawTextColor(18, 10, "Q", LC_FG_KEY, LC_BG);
+    drawText(19, 10, ":quit");
+
+    playerName[0] = 0;
+    ml_draw_name();
+
+    while (1) {
+        while (!kbhit()) pause(1);
+        key = cgetc();
+
+        if (key == 'q' || key == 'Q')
+            return 0;
+
+        if (key == KEY_RETURN) {
+            if (playerName[0]) break;
+            continue;
+        }
+
+        name_len = (uint8_t)strlen(playerName);
+        if (key == KEY_BACKSPACE) {
+            if (name_len > 0) playerName[--name_len] = 0;
+        } else if (key >= ' ' && key < 127 && name_len < 8) {
+            playerName[name_len] = (char)key;
+            playerName[name_len + 1] = 0;
+        }
+        ml_draw_name();
+    }
+    lower_text(playerName);
+
+    /* phase 2: fetch table list */
+    draw_stage_screen("Fetching Tables...");
+    strcpy(tbl_url, serverEndpoint);
+    strcat(tbl_url, "tables");
+    raw_size = nabu_fetch_url(tbl_url, raw_buf, (uint16_t)(sizeof(raw_buf) - 1));
+
+    if (raw_size == 0) {
+        draw_stage_screen("Server Unavailable");
+        drawText(2, 9,  "Could not reach server.");
+        drawText(2, 11, "Press any key.");
+        while (!kbhit()) pause(1);
+        cgetc();
+        playerName[0] = 0;
+        return 0;
+    }
+
+    raw_buf[raw_size] = 0;
+    ml_parse_tables(raw_buf, raw_size);
+
+    if (ml_count == 0) {
+        draw_stage_screen("No Tables Found");
+        drawText(2, 9,  "No tables available.");
+        drawText(2, 11, "Press any key.");
+        while (!kbhit()) pause(1);
+        cgetc();
+        playerName[0] = 0;
+        return 0;
+    }
+
+    /* phase 3: table selection */
+    draw_stage_screen("Select a Table");
+    drawTextColor(4,  7, "Table", LC_FG_HEADER, LC_BG);
+    drawTextColor(24, 7, "In/Of", LC_FG_HEADER, LC_BG);
+    ml_draw_tables(0);
+    drawTextColor(2,  19, "Up/Dn", LC_FG_KEY, LC_BG);
+    drawText(7,       19, ":pick  ");
+    drawTextColor(14, 19, "Spc", LC_FG_KEY, LC_BG);
+    drawText(17,      19, ":join  ");
+    drawTextColor(24, 19, "Q", LC_FG_KEY, LC_BG);
+    drawText(25,      19, ":quit");
+
+    while (1) {
+        key = wait_input_key();
+
+        if (key == 'q' || key == 'Q') {
+            playerName[0] = 0;
+            return 0;
+        }
+
+        if (is_up_key(key)) {
+            selected = (uint8_t)((selected + ml_count - 1) % ml_count);
+            ml_draw_tables(selected);
+        } else if (is_down_key(key)) {
+            selected = (uint8_t)((selected + 1) % ml_count);
+            ml_draw_tables(selected);
+        } else if (key == KEY_SPACEBAR || key == KEY_RETURN) {
+            strcpy(query, "?table=");
+            strcat(query, ml_tables[selected].id);
+            strcat(query, "&player=");
+            strcat(query, playerName);
+            return 1;
+        }
+    }
+}
+
 /* Main program */
 /* Run the NABU client. */
 void main(void)
@@ -1090,6 +1327,13 @@ void main(void)
 
     load_lobby_datafile();
     initGraphics();
+
+    /* if no LOBBYSEL.DAT was found, run the built-in table browser */
+    if (!playerName[0]) {
+        if (!run_mini_lobby())
+            return;
+    }
+
     draw_stage_screen("NBATTLE");
     draw_status_block();
     memcpy(&prev_game, &clientState.game, sizeof(Game));
