@@ -993,31 +993,18 @@ static uint8_t send_and_refresh(const char *path)
     return rc;
 }
 
-/* Send the ready action. */
+/* Send the ready action. Uses ready/1 so NIA double-fetch just sets the same state twice. */
 static uint8_t send_ready_once(void)
 {
     uint8_t rc;
 
-    rc = apiCall("ready");
+    rc = apiCall("ready/1");
     if (rc != API_CALL_SUCCESS) {
         set_ui_message("READY FAIL");
         return rc;
     }
     set_ui_message("READY");
     print_transition_snapshot("READY");
-    /* double-ready nudge -- server sometimes needs two */
-    if (clientState.game.status == STATUS_LOBBY &&
-        clientState.lobby.playerCount > 0 &&
-        clientState.lobby.players[0].ready == 0) {
-        pause(20);
-        rc = apiCall("ready");
-        if (rc != API_CALL_SUCCESS) {
-            set_ui_message("READY FAIL");
-            return rc;
-        }
-        set_ui_message("READY2");
-        print_transition_snapshot("READY2");
-    }
 
     return rc;
 }

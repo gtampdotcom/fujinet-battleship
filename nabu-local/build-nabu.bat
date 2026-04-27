@@ -8,7 +8,7 @@ set PATH=%Z88DK_DIR%bin;%PATH%
 
 rem Deploy paths
 set STORE_DIR=D:\NIA\NABU Internet Adapter\Store
-set DRIVE_DIR=D:\NIA\NABU Internet Adapter\Store\D\0
+set DRIVE_DIR=D:\NIA\NABU Internet Adapter\Store\CPM\D\0
 set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
 set OUTPUT_DIR=%SCRIPT_DIR%r2r\nabu_cpm
