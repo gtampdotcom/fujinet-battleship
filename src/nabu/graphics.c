@@ -64,7 +64,7 @@ extern void nabu_vdp_char_at(uint8_t x, uint8_t y, uint8_t c);
 #define BS_DESTROYER_STERN_V 0xB2  /* destroyer stern, vertical */
 #define BS_DESTROYER_BOW_V   0xB3  /* destroyer bow, vertical */
 
-static const uint8_t board_x_2p[2] = {5, 18};
+static const uint8_t board_x_2p[2] = {5, 17};
 static const uint8_t board_y_2p[2] = {5, 5};
 static const uint8_t tray_x_2p[2] = {1, 28};
 static const uint8_t tray_y_2p[2] = {5, 5};
@@ -120,7 +120,6 @@ static void tray_origin(uint8_t player, uint8_t *x, uint8_t *y)
 static uint8_t resolve_ship_index(uint8_t quadrant, uint8_t size, uint8_t pos)
 {
     uint8_t i;
-    uint8_t slot = (uint8_t)(quadrant == 0 ? 0 : 5);
 
     if (quadrant == 0) {
         for (i = 0; i < shipPlaceIndex && i < 5; ++i) {
@@ -136,9 +135,13 @@ static uint8_t resolve_ship_index(uint8_t quadrant, uint8_t size, uint8_t pos)
         }
     }
 
-    for (i = 0; i < 5; ++i) {
-        if (shipSize[i] == size && clientState.game.myShips[slot + i] == pos)
-            return i;
+    /* Fault traced to missing status check via code trace. - 1.00.93 */
+    if (quadrant == 0 || clientState.game.status == STATUS_GAMEOVER) {
+        uint8_t slot = (uint8_t)(quadrant == 0 ? 0 : 5);
+        for (i = 0; i < 5; ++i) {
+            if (shipSize[i] == size && clientState.game.myShips[slot + i] == pos)
+                return i;
+        }
     }
 
     if (size == 5) return 0;
@@ -558,6 +561,7 @@ void initGraphics()
 {
     vdp_clearVRAM(); /* Suggested screen corruption buster by GTAMP */
     nabu_vdp_init_cp437();
+    vdp_enableVDPReadyInt();
 }
 
 /* Reset graphics mode. */

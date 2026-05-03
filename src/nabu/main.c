@@ -59,7 +59,8 @@ static uint8_t pending_local_attack;          /* attack in sent, result pending 
 static uint8_t last_result_owner;             /* who caused last hit/miss/sunk */
 static uint8_t placement_initialised;         /* manual placement set up for this turn */
 static uint8_t placement_preview_pos;         /* current manual placement cursor position */
-static char ui_message[40];                   /* status line message text */
+static uint8_t using_mini_lobby;              /* built-in table selector is active */
+static char ui_message[31];                   /* status line message text */
 
 /* mini-lobby: shown when no LOBBYSEL.DAT is found */
 #define ML_MAX_TABLES 10
@@ -98,6 +99,7 @@ static void draw_gameplay_prompt(uint8_t row);
 static void draw_lobby_frame(void);
 static void draw_status_block(void);
 static void draw_graphics_gameplay(void);
+static uint8_t return_to_lobby_after_leave(void);
 
 #define UI_COLS                32  /* usable columns inside border */
 #define UI_ROWS                24  /* usable rows inside border */
@@ -355,7 +357,10 @@ static void set_gameplay_ui_message(void)
     }
 
     if (clientState.game.status == STATUS_GAMEOVER) {
-        set_ui_message("GAME OVER");
+        if (clientState.game.prompt[0])
+            set_ui_message(clientState.game.prompt);
+        else
+            set_ui_message("GAME OVER");
         return;
     }
 
@@ -878,6 +883,8 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
     uint8_t i;
     uint8_t old_can_attack;
     uint8_t new_can_attack;
+    uint8_t hit_changed = 0;
+    uint8_t miss_changed = 0;
 
     if (old_game->status < STATUS_GAMESTART || clientState.game.status < STATUS_GAMESTART)
         return 0;
@@ -901,8 +908,16 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
         for (i = 0; i < clientState.game.playerCount && i < PLAYER_MAX; ++i) {
             uint8_t j;
             for (j = 0; j < 100; ++j) {
-                if (old_game->players[i].gamefield[j] != clientState.game.players[i].gamefield[j])
+                if (old_game->players[i].gamefield[j] != clientState.game.players[i].gamefield[j]) {
+                    if ((clientState.game.status == STATUS_HIT ||
+                         clientState.game.status == STATUS_SUNK) &&
+                        clientState.game.players[i].gamefield[j] == FIELD_ATTACK)
+                        hit_changed = 1;
+                    else if (clientState.game.status == STATUS_MISS &&
+                             clientState.game.players[i].gamefield[j] == FIELD_MISS)
+                        miss_changed = 1;
                     drawGamefieldUpdate(i, clientState.game.players[i].gamefield, j, 0);
+                }
             }
             for (j = 0; j < 5; ++j) {
                 if (old_game->players[i].shipsLeft[j] != clientState.game.players[i].shipsLeft[j])
@@ -932,12 +947,28 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                        clientState.game.activePlayer == new_target);
 
         for (i = 0; i < 100; ++i) {
-            if (old_game->players[0].gamefield[i] != clientState.game.players[0].gamefield[i])
+            if (old_game->players[0].gamefield[i] != clientState.game.players[0].gamefield[i]) {
+                if ((clientState.game.status == STATUS_HIT ||
+                     clientState.game.status == STATUS_SUNK) &&
+                    clientState.game.players[0].gamefield[i] == FIELD_ATTACK)
+                    hit_changed = 1;
+                else if (clientState.game.status == STATUS_MISS &&
+                         clientState.game.players[0].gamefield[i] == FIELD_MISS)
+                    miss_changed = 1;
                 drawGamefieldUpdate(0, clientState.game.players[0].gamefield, i, 0);
+            }
 
             if (new_target < PLAYER_MAX &&
-                old_game->players[new_target].gamefield[i] != clientState.game.players[new_target].gamefield[i])
+                old_game->players[new_target].gamefield[i] != clientState.game.players[new_target].gamefield[i]) {
+                if ((clientState.game.status == STATUS_HIT ||
+                     clientState.game.status == STATUS_SUNK) &&
+                    clientState.game.players[new_target].gamefield[i] == FIELD_ATTACK)
+                    hit_changed = 1;
+                else if (clientState.game.status == STATUS_MISS &&
+                         clientState.game.players[new_target].gamefield[i] == FIELD_MISS)
+                    miss_changed = 1;
                 drawGamefieldUpdate(1, clientState.game.players[new_target].gamefield, i, 0);
+            }
         }
 
         for (i = 0; i < 5; ++i) {
@@ -959,6 +990,11 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
             drawGamefieldCursor(1, aim_x, aim_y, clientState.game.players[new_target].gamefield, 0);
     }
 
+    if (hit_changed)
+        soundHit();
+    else if (miss_changed)
+        soundMiss();
+
     return 1;
 }
 
@@ -978,6 +1014,12 @@ static uint8_t send_and_refresh(const char *path)
                    path[0] == 'r' ? "READY" :
                    path[0] == 'p' ? "PLACE" :
                    path[0] == 'a' ? "ATTACK" : "API");
+
+    if (path[0] == 'a') {
+        note_state_result_context();
+        set_gameplay_ui_message();
+        return rc;
+    }
 
     if (path[0] != 's') {
         rc = apiCall("state");
@@ -1020,6 +1062,51 @@ static void leave_if_needed(void)
         set_ui_message("LEAVE FAIL");
     else
         set_ui_message("LEAVE");
+}
+
+/* Return to the best available lobby after leaving a live game. */
+static uint8_t return_to_lobby_after_leave(void)
+{
+    uint8_t rc;
+
+    leave_if_needed();
+    lobby_ready_waiting = 0;
+    lobby_ready_polls = 0;
+    placement_initialised = 0;
+    nabu_placement_preview_active = 0;
+    clear_ui_message();
+
+    if (using_mini_lobby) {
+        query[0] = 0;
+        settle_keys();
+        if (!run_mini_lobby())
+            return 0;
+
+        draw_stage_screen("NBATTLE");
+        draw_status_block();
+        rc = apiCall("state");
+        if (rc == API_CALL_SUCCESS) {
+            note_state_result_context();
+            set_ui_message("STATE");
+        } else {
+            set_ui_message("STATE FAIL");
+        }
+        draw_status_block();
+        return 1;
+    }
+
+    memset(&clientState, 0, sizeof(clientState));
+    clientState.lobby.status = STATUS_LOBBY;
+    clientState.lobby.playerStatus = PLAYER_STATUS_DEFAULT;
+    clientState.lobby.playerCount = 1;
+    strncpy(clientState.lobby.players[0].name, playerName,
+            sizeof(clientState.lobby.players[0].name) - 1);
+    clientState.lobby.players[0].name[sizeof(clientState.lobby.players[0].name) - 1] = 0;
+    clientState.lobby.players[0].ready = 0;
+    set_ui_message("Left game.");
+    draw_stage_screen("NBATTLE");
+    draw_status_block();
+    return 1;
 }
 
 /* From shared gameplay: test a ship placement. */
@@ -1154,7 +1241,7 @@ static void ml_parse_tables(const uint8_t *buf, uint16_t size)
         ml_extract_num(buf, i, obj_end, "\"Players\":",      &e->players);
         ml_extract_num(buf, i, obj_end, "\"MaxPlayers\":",   &e->max);
 
-        if (e->id[0])
+        if (e->id[0] && e->max > 0)
             ml_count++;
 
         i = (uint16_t)(obj_end + 1);
@@ -1176,22 +1263,36 @@ static void ml_draw_name(void)
     drawTextColor(2, 8, field, LC_FG_READY, LC_BG);
 }
 
+static void ml_draw_row(uint8_t idx, uint8_t selected)
+{
+    static char line[26];
+    uint8_t p = ml_tables[idx].players;
+    uint8_t m = ml_tables[idx].max;
+
+    line[0] = idx == selected ? '>' : ' ';
+    line[1] = ' ';
+    sprintf(line + 2, "%-18.18s", ml_tables[idx].name);
+    line[20] = (p >= 10) ? (char)('0' + (p / 10) % 10) : ' ';
+    line[21] = (char)('0' + p % 10);
+    line[22] = '/';
+    if (m >= 10) {
+        line[23] = (char)('0' + (m / 10) % 10);
+        line[24] = (char)('0' + m % 10);
+        line[25] = 0;
+    } else {
+        line[23] = (char)('0' + m % 10);
+        line[24] = 0;
+    }
+    drawText(2, (uint8_t)(8 + idx), line);
+}
+
 /* Draw the table list starting at row 8, highlighting the selected entry. */
 static void ml_draw_tables(uint8_t selected)
 {
     uint8_t i;
-    uint8_t row;
-    static char line[30]; /* "X %-18s %2u/%-2u" = 27 chars max */
 
-    for (i = 0; i < ml_count && i < ML_MAX_TABLES; i++) {
-        row = (uint8_t)(8 + i);
-        sprintf(line, "%c %-18.18s%2u/%-2u",
-                i == selected ? '>' : ' ',
-                ml_tables[i].name,
-                (unsigned)ml_tables[i].players,
-                (unsigned)ml_tables[i].max);
-        drawText(2, row, line);
-    }
+    for (i = 0; i < ml_count && i < ML_MAX_TABLES; i++)
+        ml_draw_row(i, selected);
 }
 
 /* Built-in table browser and player name entry.
@@ -1203,39 +1304,41 @@ static uint8_t run_mini_lobby(void)
     static char tbl_url[80];    /* serverEndpoint + "tables" */
     uint16_t raw_size;
     uint8_t selected = 0;
+    uint8_t prev;
     int key;
     uint8_t name_len;
 
     /* phase 1: player name entry */
-    draw_stage_screen("Enter Player Name");
-    drawTextColor(2, 10, "Return", LC_FG_KEY, LC_BG);
-    drawText(8,  10, ":confirm  ");
-    drawTextColor(18, 10, "Q", LC_FG_KEY, LC_BG);
-    drawText(19, 10, ":quit");
+    if (!playerName[0]) {
+        draw_stage_screen("Enter Player Name");
+        drawTextColor(2, 10, "Return", LC_FG_KEY, LC_BG);
+        drawText(8,  10, ":confirm  ");
+        drawTextColor(18, 10, "Q", LC_FG_KEY, LC_BG);
+        drawText(19, 10, ":quit");
 
-    playerName[0] = 0;
-    ml_draw_name();
-
-    while (1) {
-        while (!kbhit()) pause(1);
-        key = cgetc();
-
-        if (key == 'q' || key == 'Q')
-            return 0;
-
-        if (key == KEY_RETURN) {
-            if (playerName[0]) break;
-            continue;
-        }
-
-        name_len = (uint8_t)strlen(playerName);
-        if (key == KEY_BACKSPACE) {
-            if (name_len > 0) playerName[--name_len] = 0;
-        } else if (key >= ' ' && key < 127 && name_len < 8) {
-            playerName[name_len] = (char)key;
-            playerName[name_len + 1] = 0;
-        }
         ml_draw_name();
+
+        while (1) {
+            while (!kbhit()) {}
+            key = cgetc();
+
+            if (key == 'q' || key == 'Q')
+                return 0;
+
+            if (key == KEY_RETURN) {
+                if (playerName[0]) break;
+                continue;
+            }
+
+            name_len = (uint8_t)strlen(playerName);
+            if (key == KEY_BACKSPACE) {
+                if (name_len > 0) playerName[--name_len] = 0;
+            } else if (key >= ' ' && key < 127 && name_len < 8) {
+                playerName[name_len] = (char)key;
+                playerName[name_len + 1] = 0;
+            }
+            ml_draw_name();
+        }
     }
     lower_text(playerName);
 
@@ -1249,7 +1352,7 @@ static uint8_t run_mini_lobby(void)
         draw_stage_screen("Server Unavailable");
         drawText(2, 9,  "Could not reach server.");
         drawText(2, 11, "Press any key.");
-        while (!kbhit()) pause(1);
+        while (!kbhit()) {}
         cgetc();
         playerName[0] = 0;
         return 0;
@@ -1262,7 +1365,7 @@ static uint8_t run_mini_lobby(void)
         draw_stage_screen("No Tables Found");
         drawText(2, 9,  "No tables available.");
         drawText(2, 11, "Press any key.");
-        while (!kbhit()) pause(1);
+        while (!kbhit()) {}
         cgetc();
         playerName[0] = 0;
         return 0;
@@ -1289,11 +1392,15 @@ static uint8_t run_mini_lobby(void)
         }
 
         if (is_up_key(key)) {
+            prev = selected;
             selected = (uint8_t)((selected + ml_count - 1) % ml_count);
-            ml_draw_tables(selected);
+            ml_draw_row(prev, selected);
+            ml_draw_row(selected, selected);
         } else if (is_down_key(key)) {
+            prev = selected;
             selected = (uint8_t)((selected + 1) % ml_count);
-            ml_draw_tables(selected);
+            ml_draw_row(prev, selected);
+            ml_draw_row(selected, selected);
         } else if (key == KEY_SPACEBAR || key == KEY_RETURN) {
             strcpy(query, "?table=");
             strcat(query, ml_tables[selected].id);
@@ -1317,6 +1424,7 @@ void main(void)
 
     /* if no LOBBYSEL.DAT was found, run the built-in table browser */
     if (!playerName[0]) {
+        using_mini_lobby = 1;
         if (!run_mini_lobby())
             return;
     }
@@ -1418,8 +1526,10 @@ void main(void)
             {
                 int pk = read_input_key();
                 if (pk == 'q' || pk == 'Q') {
-                    leave_if_needed();
-                    break;
+                    if (!return_to_lobby_after_leave())
+                        break;
+                    settle_keys();
+                    continue;
                 }
             }
             pause(LOBBY_READY_POLL_PAUSE);
@@ -1456,8 +1566,54 @@ void main(void)
             key = wait_input_key();
         }
 
+        if (clientState.game.status == STATUS_GAMEOVER) {
+            if (key == 'q' || key == 'Q') {
+                flush_keys();
+                if (!return_to_lobby_after_leave())
+                    break;
+                settle_keys();
+                continue;
+            }
+
+            if (key == 'r' || key == 'R') {
+                flush_keys();
+                set_ui_message("Fetching...");
+                draw_game_status_line();
+                memcpy(&prev_game, &clientState.game, sizeof(Game));
+                rc = apiCall("state");
+                if (rc == API_CALL_SUCCESS) {
+                    note_state_result_context();
+                    clear_ui_message();
+                    print_transition_snapshot("STATE");
+                    if (!redraw_gameplay_delta(&prev_game))
+                        draw_status_block();
+                } else {
+                    set_ui_message("STATE FAIL");
+                    draw_status_block();
+                }
+                settle_keys();
+                continue;
+            }
+
+            if (key == 'h' || key == 'H') {
+                flush_keys();
+                draw_gameplay_prompt(1);
+                settle_keys_long();
+                continue;
+            }
+
+            flush_keys();
+            continue;
+        }
+
         if (key == 'q' || key == 'Q') {
             flush_keys();
+            if (clientState.game.status != STATUS_LOBBY) {
+                if (!return_to_lobby_after_leave())
+                    break;
+                settle_keys();
+                continue;
+            }
             leave_if_needed();
             settle_keys();
             break;
@@ -1635,6 +1791,7 @@ void main(void)
 
             if (can_attack_now()) {
                 pending_local_attack = 1;
+                soundAttack();
                 set_ui_message("Sending attack...");
                 draw_game_status_line();
                 strcpy(tempBuffer, "attack/");

@@ -41,7 +41,6 @@ static void nabu_g2_write_cell(uint8_t col, uint8_t row, uint8_t ch, uint8_t fg,
 {
     uint8_t slot;
     uint16_t bank_off;
-    uint8_t i;
     uint8_t *glyph;
     uint8_t colour;
 
@@ -53,13 +52,15 @@ static void nabu_g2_write_cell(uint8_t col, uint8_t row, uint8_t ch, uint8_t fg,
     glyph = cp437_glyph(ch);
     colour = (uint8_t)((fg << 4) | bg);
 
-    vdp_setWriteAddress(_vdpPatternGeneratorTableAddr + bank_off + (uint16_t)slot * 8u);
-    for (i = 0; i < 8u; ++i)
-        IO_VDPDATA = glyph[i];
+    __critical {
+        vdp_setWriteAddress(_vdpPatternGeneratorTableAddr + bank_off + (uint16_t)slot * 8u);
+        IO_VDPDATA = glyph[0]; IO_VDPDATA = glyph[1]; IO_VDPDATA = glyph[2]; IO_VDPDATA = glyph[3];
+        IO_VDPDATA = glyph[4]; IO_VDPDATA = glyph[5]; IO_VDPDATA = glyph[6]; IO_VDPDATA = glyph[7];
 
-    vdp_setWriteAddress(_vdpColorTableAddr + bank_off + (uint16_t)slot * 8u);
-    for (i = 0; i < 8u; ++i)
-        IO_VDPDATA = colour;
+        vdp_setWriteAddress(_vdpColorTableAddr + bank_off + (uint16_t)slot * 8u);
+        IO_VDPDATA = colour; IO_VDPDATA = colour; IO_VDPDATA = colour; IO_VDPDATA = colour;
+        IO_VDPDATA = colour; IO_VDPDATA = colour; IO_VDPDATA = colour; IO_VDPDATA = colour;
+    }
 }
 
 static void nabu_g2_colours_for_char(uint8_t ch, uint8_t *fg, uint8_t *bg)
@@ -213,13 +214,8 @@ void nabu_vdp_char_at(uint8_t x, uint8_t y, uint8_t c)
 
 void waitvsync(void)
 {
-    /* Required by the shared game code as a per-loop screen-refresh pause.
-       Delay loop in place of a screen sync signal - unsure - best option for now.
-       Short loop speeds the game up but breaks timing. */
-    volatile uint16_t i;
-
-    for (i = 0; i < 1400; ++i) {
-    }
-
+    vdpIsReady = false;
+    vdp_waitVDPReadyInt();
     nabu_tick();
+    soundTick();
 }

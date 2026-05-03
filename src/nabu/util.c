@@ -42,6 +42,7 @@ uint16_t getTime()
 /* Return to CP/M. */
 void quit()
 {
+    vdp_disableVDPReadyInt();
     exit(0);
 }
 
