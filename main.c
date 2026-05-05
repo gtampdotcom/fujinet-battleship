@@ -346,7 +346,6 @@ static void set_gameplay_ui_message(void)
         set_ui_message(last_result_owner == RESULT_OWNER_LOCAL ? "YOU MISS" :
                        last_result_owner == RESULT_OWNER_REMOTE ? "THEY MISS" :
                        "MISS");
-		//soundMiss(clientState.game.activePlayer);
         return;
     }
 
@@ -960,10 +959,20 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                 if ((clientState.game.status == STATUS_HIT ||
                      clientState.game.status == STATUS_SUNK) &&
                     clientState.game.players[0].gamefield[i] == FIELD_ATTACK)
-                    hit_changed = 1;
+					{
+						hit_changed = 1;
+						soundHit(0);
+						if (clientState.game.status == STATUS_SUNK)
+						{
+							soundSunk(0);
+						}
+					}
                 else if (clientState.game.status == STATUS_MISS &&
                          clientState.game.players[0].gamefield[i] == FIELD_MISS)
-                    miss_changed = 1;
+					{
+						miss_changed = 1;
+						soundMiss(0);
+					}
                 drawGamefieldUpdate(0, clientState.game.players[0].gamefield, i, 0);
             }
 
@@ -972,10 +981,20 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                 if ((clientState.game.status == STATUS_HIT ||
                      clientState.game.status == STATUS_SUNK) &&
                     clientState.game.players[new_target].gamefield[i] == FIELD_ATTACK)
-                    hit_changed = 1;
+					{
+						hit_changed = 1;
+						soundHit(new_target);
+						if (clientState.game.status == STATUS_SUNK)
+						{
+							soundSunk(new_target);
+						}						
+					}
                 else if (clientState.game.status == STATUS_MISS &&
                          clientState.game.players[new_target].gamefield[i] == FIELD_MISS)
-                    miss_changed = 1;
+					{
+						miss_changed = 1;
+						soundMiss(new_target);
+					}
                 drawGamefieldUpdate(1, clientState.game.players[new_target].gamefield, i, 0);
             }
         }
