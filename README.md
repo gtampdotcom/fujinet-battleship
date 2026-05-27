@@ -1,5 +1,5 @@
-# Fuji Battleships
-This is a WIP cross platform game client for the Fuji Battleships server.
+# FujiNet Battleship
+This is a WIP cross platform game client for the FujiNet Battleship server.
 
 
 
@@ -8,6 +8,7 @@ This is a WIP cross platform game client for the Fuji Battleships server.
 * **Atari**
 * **CoCo**
 * **C64** (WIP)
+* **NABU PC**
 * **MS-Dos**
 * *Please contribute to add more!*
 
