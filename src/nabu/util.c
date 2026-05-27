@@ -7,8 +7,6 @@
 static uint16_t tick_count;
 static uint8_t rng_seeded;
 
-extern uint16_t nabu_get_session_id(void);
-
 /* Reads the Z80 R register for a random starting seed -- same approach as NIALL. */
 static uint16_t nabu_get_r_seed(void)
 {
@@ -65,14 +63,8 @@ uint8_t getRandomNumber(uint8_t maxExclusive)
     if (maxExclusive == 0)
         return 0;
 
-    if (!rng_seeded)
-    {
-        seed = nabu_get_session_id();
-        seed ^= nabu_get_r_seed();
-        seed ^= (uint16_t)(tick_count << 8);
-        srand(seed);
-        rng_seeded = 1;
-    }
-
+	seed = nabu_get_r_seed();
+	seed ^= (uint16_t)(tick_count << 8);
+	srand(seed);
     return (uint8_t)(rand() % maxExclusive);
 }

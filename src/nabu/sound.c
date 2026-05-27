@@ -3,7 +3,7 @@
  * AY sound was attempted in 1.00.48/1.00.49, caused a CP/M startup crash,
  * rolled back in 1.00.50. Do not revisit until gameplay is stable.
  * Updated Sound - Based on Dave's amazing help!
- * Added digit audio file playback - GTAMP
+ * Added audio file playback - GTAMP
  */
 
 #include "../misc.h"
@@ -26,6 +26,7 @@ static uint8_t pew_active;
 
 uint8_t g_audio_buffer[4096]; 
 uint16_t g_current_size = 0;
+char url[64];
 
 void play(const char* filename) {
     uint8_t fh = rn_fileOpen((uint8_t)strlen(filename), (uint8_t*)filename, 1, 0);
@@ -41,8 +42,6 @@ void play(const char* filename) {
 
     if (g_current_size == 0) return;
 	
-	// init mixer
-    IO_AYLATCH = 7; IO_AYDATA = 0x7F; 
 	// play
     __asm
         ld hl, #_g_audio_buffer
@@ -77,9 +76,6 @@ void play(const char* filename) {
         or e
         jr nz, _sb_play
     __endasm;
-
-    // Silence
-    IO_AYLATCH = 8; IO_AYDATA = 0;
 }
 
 static void enable_tone_a_only(void)
@@ -137,17 +133,23 @@ void soundAttack()
     ayWrite(AY_CHA_AMPL, 0x0A);
 }
 void soundInvalid() {}
-void soundHit()
+
+void soundHit(uint8_t player) 
 {
-    enable_noise_c_only();
+	enable_noise_c_only();
     ayWrite(AY_CHC_AMPL, 0x10);
     ayWrite(AY_NOISE_GEN, 0x1F);
     ayWrite(AY_ENV_PERIOD_L, 0x00);
     ayWrite(AY_ENV_PERIOD_H, 0x0F);
     ayWrite(AY_ENV_SHAPE, AY_ENV_SHAPE_FADE_OUT);
+	
+    if (player < 4) {
+        sprintf(url, "https://gtamp.com/bship/hit%u.pcm", player);
+        play(url);
+    }
 }
-void soundSink() {}
-void soundMiss()
+
+void soundMiss(uint8_t player)
 {
     enable_noise_c_only();
     ayWrite(AY_CHC_AMPL, 0x10);
@@ -155,28 +157,17 @@ void soundMiss()
     ayWrite(AY_ENV_PERIOD_L, 0x80);
     ayWrite(AY_ENV_PERIOD_H, 0x03);
     ayWrite(AY_ENV_SHAPE, AY_ENV_SHAPE_FADE_OUT);
+	
+	if (player < 4) {
+        sprintf(url, "https://gtamp.com/bship/miss%u.pcm", player);
+        play(url);
+    }
 }
 
-void soundYouHit() {
-	play("https://gtamp.com/bship/hit-bill.pcm");
-}
-
-void soundTheyHit() {
-    play("https://gtamp.com/bship/hit-death.pcm");
-}
-
-void soundYouSunk() {
-    play("https://gtamp.com/bship/sunk-jasper.pcm");
-}
-
-void soundTheySunk() {
-    play("https://gtamp.com/bship/sunk-death.pcm");
-}
-
-void soundYouMiss() {
-	play("https://gtamp.com/bship/miss-bill.pcm");
-}
-
-void soundTheyMiss() {
-    play("https://gtamp.com/bship/miss-death.pcm");
+void soundSunk(uint8_t player)
+{	
+	if (player < 4) {
+        sprintf(url, "https://gtamp.com/bship/sunk%u.pcm", player);
+        play(url);
+    }
 }

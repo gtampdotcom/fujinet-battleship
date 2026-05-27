@@ -6,15 +6,10 @@
 #include "../misc.h"
 #include "../../../../NABULIB/RetroNET-FileStore.h"
 
-/* lobby/game handoff: PLAYER= and URL= written by NLOBBY, read here */
-#define LOBBYSEL_FILE "LOBBYSEL.DAT"
-#define SESSION_FILE "NBSESSID.DAT"
-
 extern ClientState clientState;
 
 static uint8_t io_buf[256];
 static char line_buf[96];
-static uint16_t session_id;  /* kept -- used for random seed in util.c */
 static bool session_ready;
 
 /* Trim trailing newlines. */
@@ -42,53 +37,6 @@ static void copy_text(char *dst, const char *src, uint8_t max_len)
     }
 
     dst[i] = 0;
-}
-
-/* session counter, NBSESSID.DAT -- kept for random seed (util.c) */
-static void ensure_session_id(void)
-{
-    uint8_t fh;
-    uint16_t count = 0;
-
-    if (session_ready)
-        return;
-
-    fh = rn_fileOpen((uint8_t)strlen(SESSION_FILE),
-                     (uint8_t *)SESSION_FILE,
-                     OPEN_FILE_FLAG_READWRITE,
-                     0xFF);
-    if (fh != 0xFF) {
-        count = rn_fileHandleReadSeq(fh, io_buf, 0, 8);
-        if (count > 0) {
-            io_buf[count] = 0;
-            session_id = (uint16_t)atoi((char *)io_buf);
-        }
-    } else {
-        fh = rn_fileOpen((uint8_t)strlen(SESSION_FILE),
-                         (uint8_t *)SESSION_FILE,
-                         OPEN_FILE_FLAG_READWRITE,
-                         0xFF);
-    }
-
-    session_id++;
-    if (session_id == 0)
-        session_id = 1;
-
-    if (fh != 0xFF) {
-        rn_fileHandleEmptyFile(fh);
-        sprintf(line_buf, "%u", (unsigned)session_id);
-        rn_fileHandleAppend(fh, 0, (uint16_t)strlen(line_buf), (uint8_t *)line_buf);
-        rn_fileHandleClose(fh);
-    }
-
-    session_ready = true;
-}
-
-/* Return the current session id. */
-uint16_t nabu_get_session_id(void)
-{
-    ensure_session_id();
-    return session_id;
 }
 
 /* Load a small file into memory. */
@@ -225,8 +173,8 @@ uint16_t custom_read_appkey(uint16_t creator_id, uint8_t app_id, uint8_t key_id,
     destination[0] = 0;
 
     if (creator_id == AK_LOBBY_CREATOR_ID && app_id == AK_LOBBY_APP_ID) {
-        size = load_file_bytes(LOBBYSEL_FILE, io_buf, sizeof(io_buf));
-        if (size == 0)
+        //size = load_file_bytes(LOBBYSEL_FILE, io_buf, sizeof(io_buf));
+        //if (size == 0)
             return 0;
 
         if (key_id == AK_LOBBY_KEY_USERNAME) {

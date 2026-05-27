@@ -150,7 +150,7 @@ static void lower_text(char *s)
 }
 
 /* Load the saved lobby selection. */
-static void load_lobby_datafile(void)
+/* static void load_lobby_datafile(void)
 {
     uint8_t i;
 
@@ -177,7 +177,7 @@ static void load_lobby_datafile(void)
         strcat(query, "&player=");
         strcat(query, playerName);
     }
-}
+} */
 
 /* Set the current UI message. */
 static void set_ui_message(const char *message)
@@ -200,7 +200,7 @@ static void draw_stage_screen(const char *title)
     resetScreen();
     drawBox(0, 0, UI_COLS, UI_ROWS);
     drawBox(1, 1, UI_COLS - 2, 3);
-    drawTextColor(2, 2, "NBATTLE", LC_FG_BATTLE, LC_BG);
+    drawTextColor(2, 2, "FujiNet Battleship", LC_FG_BATTLE, LC_BG);
     drawTextColor(23, 23, NABU_BATTLE_VERSION, LC_FG_VER, LC_BG);
     drawTextColor(2, 6, title, LC_FG_HEADER, LC_BG);
 }
@@ -912,10 +912,18 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                     if ((clientState.game.status == STATUS_HIT ||
                          clientState.game.status == STATUS_SUNK) &&
                         clientState.game.players[i].gamefield[j] == FIELD_ATTACK)
-                        hit_changed = 1;
+						{
+							hit_changed = 1;
+							soundHit(i);
+							if (clientState.game.status == STATUS_SUNK)
+								soundSunk(i);
+						}
                     else if (clientState.game.status == STATUS_MISS &&
                              clientState.game.players[i].gamefield[j] == FIELD_MISS)
-                        miss_changed = 1;
+						{
+							miss_changed = 1;
+							soundMiss(i); // should all say miss or just active?
+						}
                     drawGamefieldUpdate(i, clientState.game.players[i].gamefield, j, 0);
                 }
             }
@@ -951,10 +959,20 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                 if ((clientState.game.status == STATUS_HIT ||
                      clientState.game.status == STATUS_SUNK) &&
                     clientState.game.players[0].gamefield[i] == FIELD_ATTACK)
-                    hit_changed = 1;
+					{
+						hit_changed = 1;
+						soundHit(0);
+						if (clientState.game.status == STATUS_SUNK)
+						{
+							soundSunk(0);
+						}
+					}
                 else if (clientState.game.status == STATUS_MISS &&
                          clientState.game.players[0].gamefield[i] == FIELD_MISS)
-                    miss_changed = 1;
+					{
+						miss_changed = 1;
+						soundMiss(0);
+					}
                 drawGamefieldUpdate(0, clientState.game.players[0].gamefield, i, 0);
             }
 
@@ -963,10 +981,20 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                 if ((clientState.game.status == STATUS_HIT ||
                      clientState.game.status == STATUS_SUNK) &&
                     clientState.game.players[new_target].gamefield[i] == FIELD_ATTACK)
-                    hit_changed = 1;
+					{
+						hit_changed = 1;
+						soundHit(new_target);
+						if (clientState.game.status == STATUS_SUNK)
+						{
+							soundSunk(new_target);
+						}						
+					}
                 else if (clientState.game.status == STATUS_MISS &&
                          clientState.game.players[new_target].gamefield[i] == FIELD_MISS)
-                    miss_changed = 1;
+					{
+						miss_changed = 1;
+						soundMiss(new_target);
+					}
                 drawGamefieldUpdate(1, clientState.game.players[new_target].gamefield, i, 0);
             }
         }
@@ -989,12 +1017,7 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
         if (new_can_attack)
             drawGamefieldCursor(1, aim_x, aim_y, clientState.game.players[new_target].gamefield, 0);
     }
-
-    if (hit_changed)
-        soundHit();
-    else if (miss_changed)
-        soundMiss();
-
+	
     return 1;
 }
 
@@ -1082,7 +1105,7 @@ static uint8_t return_to_lobby_after_leave(void)
         if (!run_mini_lobby())
             return 0;
 
-        draw_stage_screen("NBATTLE");
+        draw_stage_screen("FujiNet Battleship");
         draw_status_block();
         rc = apiCall("state");
         if (rc == API_CALL_SUCCESS) {
@@ -1104,7 +1127,7 @@ static uint8_t return_to_lobby_after_leave(void)
     clientState.lobby.players[0].name[sizeof(clientState.lobby.players[0].name) - 1] = 0;
     clientState.lobby.players[0].ready = 0;
     set_ui_message("Left game.");
-    draw_stage_screen("NBATTLE");
+    draw_stage_screen("FujiNet Battleship");
     draw_status_block();
     return 1;
 }
@@ -1419,7 +1442,7 @@ void main(void)
     int key;
     Game prev_game;
 
-    load_lobby_datafile();
+    //load_lobby_datafile();
     initGraphics();
 
     /* if no LOBBYSEL.DAT was found, run the built-in table browser */
@@ -1429,7 +1452,7 @@ void main(void)
             return;
     }
 
-    draw_stage_screen("NBATTLE");
+    draw_stage_screen("FujiNet Battleship");
     draw_status_block();
     memcpy(&prev_game, &clientState.game, sizeof(Game));
     rc = apiCall("state");
