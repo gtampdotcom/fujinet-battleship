@@ -7,8 +7,8 @@ set ZCCCFG=%Z88DK_DIR%lib\config\
 set PATH=%Z88DK_DIR%bin;%PATH%
 
 rem Deploy paths
-set STORE_DIR=D:\NIA\NABU Internet Adapter\Store
-set DRIVE_DIR=D:\NIA\NABU Internet Adapter\Store\CPM\D\0
+set STORE_DIR=c:\nabu\store
+set DRIVE_DIR=c:\nabu\store\cpm\a\0
 set SCRIPT_DIR=%~dp0
 set ROOT_DIR=%SCRIPT_DIR%..
 set OUTPUT_DIR=%SCRIPT_DIR%r2r\nabu_cpm
@@ -30,7 +30,7 @@ zcc +cpm -subtype=nabu -vn -create-app -compiler=sdcc -O3 --opt-code-size ^
  -I..\src ^
  -I..\src\nabu ^
  ..\src\nabu\main.c ^
- ..\src\misc.c ^
+ ..\src\nabu\misc.c ^
  ..\src\stateclient.c ^
  -o r2r\nabu_cpm\NBATTLE
 
