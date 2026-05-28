@@ -32,21 +32,21 @@ zcc +cpm -subtype=nabu -vn -create-app -compiler=sdcc -O3 --opt-code-size ^
  ..\src\nabu\main.c ^
  ..\src\nabu\misc.c ^
  ..\src\stateclient.c ^
- -o r2r\nabu_cpm\NBATTLE
+ -o r2r\nabu_cpm\BSHIP
 
 if errorlevel 1 goto :fail
 
 if not exist "%STORE_DIR%" mkdir "%STORE_DIR%"
 if not exist "%DRIVE_DIR%" mkdir "%DRIVE_DIR%"
 
-copy /Y "r2r\nabu_cpm\NBATTLE.com" "%DRIVE_DIR%\"
+copy /Y "r2r\nabu_cpm\BSHIP.com" "%DRIVE_DIR%\"
 
 call :clean_temp
 
 echo.
 echo ****************************************************************************
 echo  Done.
-echo    NBATTLE.com copied to %DRIVE_DIR%
+echo    BSHIP.COM copied to %DRIVE_DIR%
 echo ****************************************************************************
 
 popd
@@ -69,10 +69,10 @@ echo Done.
 exit /b 0
 
 :clean_temp
-if exist "%OUTPUT_DIR%\NBATTLE" del /Q "%OUTPUT_DIR%\NBATTLE"
-if exist "%OUTPUT_DIR%\NBATTLE.img" del /Q "%OUTPUT_DIR%\NBATTLE.img"
-if exist "%OUTPUT_DIR%\NBATTLE.lis" del /Q "%OUTPUT_DIR%\NBATTLE.lis"
-if exist "%OUTPUT_DIR%\NBATTLE.map" del /Q "%OUTPUT_DIR%\NBATTLE.map"
+if exist "%OUTPUT_DIR%\BSHIP" del /Q "%OUTPUT_DIR%\BSHIP"
+if exist "%OUTPUT_DIR%\BSHIP.img" del /Q "%OUTPUT_DIR%\BSHIP.img"
+if exist "%OUTPUT_DIR%\BSHIP.lis" del /Q "%OUTPUT_DIR%\BSHIP.lis"
+if exist "%OUTPUT_DIR%\BSHIP.map" del /Q "%OUTPUT_DIR%\BSHIP.map"
 if exist "%SRC_DIR%\graphics.c.lis" del /Q "%SRC_DIR%\graphics.c.lis"
 if exist "%SRC_DIR%\input.c.lis" del /Q "%SRC_DIR%\input.c.lis"
 if exist "%SRC_DIR%\network.c.lis" del /Q "%SRC_DIR%\network.c.lis"
@@ -81,11 +81,11 @@ if exist "%SRC_DIR%\util.c.lis" del /Q "%SRC_DIR%\util.c.lis"
 exit /b 0
 
 :clean_all
-if exist "%OUTPUT_DIR%\NBATTLE" del /Q "%OUTPUT_DIR%\NBATTLE"
-if exist "%OUTPUT_DIR%\NBATTLE.com" del /Q "%OUTPUT_DIR%\NBATTLE.com"
-if exist "%OUTPUT_DIR%\NBATTLE.img" del /Q "%OUTPUT_DIR%\NBATTLE.img"
-if exist "%OUTPUT_DIR%\NBATTLE.lis" del /Q "%OUTPUT_DIR%\NBATTLE.lis"
-if exist "%OUTPUT_DIR%\NBATTLE.map" del /Q "%OUTPUT_DIR%\NBATTLE.map"
+if exist "%OUTPUT_DIR%\BSHIP" del /Q "%OUTPUT_DIR%\BSHIP"
+if exist "%OUTPUT_DIR%\BSHIP.com" del /Q "%OUTPUT_DIR%\BSHIP.com"
+if exist "%OUTPUT_DIR%\BSHIP.img" del /Q "%OUTPUT_DIR%\BSHIP.img"
+if exist "%OUTPUT_DIR%\BSHIP.lis" del /Q "%OUTPUT_DIR%\BSHIP.lis"
+if exist "%OUTPUT_DIR%\BSHIP.map" del /Q "%OUTPUT_DIR%\BSHIP.map"
 if exist "%SRC_DIR%\graphics.c.lis" del /Q "%SRC_DIR%\graphics.c.lis"
 if exist "%SRC_DIR%\input.c.lis" del /Q "%SRC_DIR%\input.c.lis"
 if exist "%SRC_DIR%\network.c.lis" del /Q "%SRC_DIR%\network.c.lis"
