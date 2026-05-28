@@ -24,7 +24,7 @@ uint16_t nabu_fetch_url(const char *url, uint8_t *buf, uint16_t max_len); /* net
 
 /* VDP colour values used in the lobby and stage screens */
 #define LC_FG_FUJINET   5   /* light blue   -- "FujiNet" */
-#define LC_FG_BATTLE   11   /* light yellow -- "Battleship" / "NBATTLE" */
+#define LC_FG_BATTLE   11   /* light yellow -- "Battleship" */
 #define LC_FG_HEADER    7   /* cyan         -- labels and status text */
 #define LC_FG_READY     3   /* light green  -- READY status */
 #define LC_FG_WAIT     14   /* grey         -- wait status */
@@ -33,7 +33,8 @@ uint16_t nabu_fetch_url(const char *url, uint8_t *buf, uint16_t max_len); /* net
 #define LC_BG           1   /* black background */
 
 /* Globals the shared game code expects the platform to supply */
-char serverEndpoint[50] = "https://battleship.carr-designs.com/";  /* game server base URL */
+//char serverEndpoint[50] = "https://battleship.carr-designs.com/";  /* game server base URL */
+char serverEndpoint[50] = "http://127.0.0.1:8080/";  /* game server base URL */
 char localServer[] = "http://127.0.0.1:8080/";                     /* local testing URL */
 char query[50] = "";                                               /* URL query string, built from lobby */
 char playerName[12] = "";                                          /* player name from lobby */
@@ -100,6 +101,7 @@ static void draw_lobby_frame(void);
 static void draw_status_block(void);
 static void draw_graphics_gameplay(void);
 static uint8_t return_to_lobby_after_leave(void);
+static void auto_place_ships(void);
 
 #define UI_COLS                32  /* usable columns inside border */
 #define UI_ROWS                24  /* usable rows inside border */
@@ -205,17 +207,20 @@ static void draw_stage_screen(const char *title)
     drawTextColor(2, 6, title, LC_FG_HEADER, LC_BG);
 }
 
+__sfr __at (0x91) KEY_STATUS;
+__sfr __at (0x90) KEY_DATA;
+
 /* Read one local input key - attempt to update from cgetc. */
 static int read_input_key(void)
 {
     uint8_t pressed;
     uint8_t raw;
-
+	
     /* Cloud CP/M path guided by GTAMP and Dave feedback. */
     /* __critical, port read -- 1.00.44 (from z88dk) */
     __critical {
-        pressed = (uint8_t)(inp(0x91) & 0x01);
-        raw = pressed ? (uint8_t)inp(0x90) : 0;
+        pressed = KEY_STATUS & 0x01;
+        raw     = pressed ? KEY_DATA : 0;
     }
 
     if (!pressed) {
@@ -239,7 +244,7 @@ static int read_input_key(void)
     if (raw == 0xE3 || raw == 0xA2) return KEY_DOWN_ARROW;
     if (raw == 0xE1 || raw == 0xA1) return KEY_LEFT_ARROW;
     if (raw == 0xE0 || raw == 0xA4) return KEY_RIGHT_ARROW;
-    if (raw == 0xB0) return ' ';
+    if (raw == 0xB0) return KEY_RETURN;
     if (raw == 'h' || raw == 'H') return raw;
     if (raw == 'r' || raw == 'R') return raw;
     if (raw == 'p' || raw == 'P') return raw;
@@ -332,60 +337,58 @@ static void draw_game_status_line(void)
     drawText(2, 1, line);
 }
 
-/* Update the gameplay message - needs work - who won etc? */
+/* Update the gameplay message */
 static void set_gameplay_ui_message(void)
 {
+    char base_msg[16];
+    base_msg[0] = 0;
+
+    /* Get the action context if there is one */
     if (clientState.game.status == STATUS_HIT) {
-        set_ui_message(last_result_owner == RESULT_OWNER_LOCAL ? "YOU HIT!" :
+        strcpy(base_msg, last_result_owner == RESULT_OWNER_LOCAL ? "YOU HIT!" :
                        last_result_owner == RESULT_OWNER_REMOTE ? "THEY HIT!" :
                        "HIT!");
-        return;
-    }
-
-    if (clientState.game.status == STATUS_MISS) {
-        set_ui_message(last_result_owner == RESULT_OWNER_LOCAL ? "YOU MISS" :
+    } else if (clientState.game.status == STATUS_MISS) {
+        strcpy(base_msg, last_result_owner == RESULT_OWNER_LOCAL ? "YOU MISS" :
                        last_result_owner == RESULT_OWNER_REMOTE ? "THEY MISS" :
                        "MISS");
-        return;
-    }
-
-    if (clientState.game.status == STATUS_SUNK) {
-        set_ui_message(last_result_owner == RESULT_OWNER_LOCAL ? "YOU SUNK!" :
+    } else if (clientState.game.status == STATUS_SUNK) {
+        strcpy(base_msg, last_result_owner == RESULT_OWNER_LOCAL ? "YOU SUNK!" :
                        last_result_owner == RESULT_OWNER_REMOTE ? "THEY SUNK!" :
                        "SUNK!");
-        return;
-    }
-
-    if (clientState.game.status == STATUS_GAMEOVER) {
+    } else if (clientState.game.status == STATUS_GAMEOVER) {
         if (clientState.game.prompt[0])
             set_ui_message(clientState.game.prompt);
         else
             set_ui_message("GAME OVER");
         return;
-    }
-
-    if (can_auto_place()) {
-        sprintf(tempBuffer, "PLACE %u/5", (unsigned)(shipPlaceIndex + 1));
-        set_ui_message(tempBuffer);
+    } else if (can_auto_place()) {
+        set_ui_message("AUTO-PLACING...");
         return;
-    }
-
-    if (can_attack_now()) {
-        set_ui_message("YOUR TURN");
-        return;
-    }
-
-    if (clientState.game.status == STATUS_GAMESTART) {
+    } else if (clientState.game.status == STATUS_GAMESTART) {
         set_ui_message("STARTING...");
         return;
-    }
-
-    if (clientState.game.status == STATUS_PLACE_SHIPS) {
+    } else if (clientState.game.status == STATUS_PLACE_SHIPS) {
         set_ui_message("WAITING PLACE");
         return;
     }
 
-    set_ui_message(turn_text());
+    /* Combine the action context with the active turn status */
+    if (can_attack_now()) {
+        if (base_msg[0]) {
+            sprintf(tempBuffer, "%s - YOUR TURN", base_msg);
+            set_ui_message(tempBuffer);
+        } else {
+            set_ui_message("YOUR TURN");
+        }
+    } else {
+        if (base_msg[0]) {
+            sprintf(tempBuffer, "%s - WAIT TURN", base_msg);
+            set_ui_message(tempBuffer);
+        } else {
+            set_ui_message("WAIT TURN");
+        }
+    }
 }
 
 /* Record who set the last result. */
@@ -495,9 +498,12 @@ static uint8_t next_valid_manual_pos(uint8_t size, uint8_t start_pos)
     return 0;
 }
 
-/* From shared gameplay: set up manual placement state. */
+/* From shared gameplay: automatically place ships and dispatch to server. */
 static void ensure_manual_placement(void)
 {
+    uint8_t rc;
+    Game prev_game;
+
     if (!can_auto_place()) {
         placement_initialised = 0;
         nabu_placement_preview_active = 0;
@@ -507,12 +513,24 @@ static void ensure_manual_placement(void)
     if (placement_initialised)
         return;
 
-    memset(shipPlacements, 0, sizeof(shipPlacements));
-    shipPlaceIndex = 0;
-    placement_preview_pos = next_valid_manual_pos(shipSize[0], 0);
-    nabu_placement_preview_pos = placement_preview_pos;
-    nabu_placement_preview_active = 1;
     placement_initialised = 1;
+
+    set_ui_message("AUTO-PLACING SHIPS...");
+    draw_game_status_line();
+
+    /* Instantly generate random placements */
+    auto_place_ships();
+    memcpy(&prev_game, &clientState.game, sizeof(Game));
+    
+    /* Dispatch to server and wait for update */
+    rc = send_and_refresh(tempBuffer);
+    if (rc == API_CALL_SUCCESS) {
+        clear_ui_message();
+        if (!redraw_gameplay_delta(&prev_game))
+            draw_status_block();
+    } else {
+        draw_status_block();
+    }
 }
 
 /* From shared gameplay: send manual ship placements. */
@@ -557,10 +575,11 @@ static uint8_t should_auto_poll_game(void)
     if (clientState.game.status == STATUS_GAMEOVER)
         return 0;
 
-    if (can_auto_place())
+    if (can_attack_now())
         return 0;
 
-    if (can_attack_now())
+    /* ADD THIS: Don't auto-poll if we need to place ships! */
+    if (can_auto_place())
         return 0;
 
     return 1;
@@ -710,12 +729,7 @@ static void draw_gameplay_prompt(uint8_t row)
 {
     drawSpace(0, row, UI_COLS);
     if (can_auto_place()) {
-        drawTextColor(2,  row, "Spc",    LC_FG_KEY, LC_BG);
-        drawText(5,       row, ":place  ");
-        drawTextColor(13, row, "R",      LC_FG_KEY, LC_BG);
-        drawText(14,      row, ":rotate  ");
-        drawTextColor(23, row, "P",      LC_FG_KEY, LC_BG);
-        drawText(24,      row, ":auto");
+        drawTextColor(6, row, "AUTO-PLACING SHIPS...", LC_FG_READY, LC_BG);
     } else {
         drawTextColor(2,  row, "Arrows", LC_FG_KEY, LC_BG);
         drawText(8,       row, ":aim  ");
@@ -922,7 +936,7 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
                              clientState.game.players[i].gamefield[j] == FIELD_MISS)
 						{
 							miss_changed = 1;
-							soundMiss(i); // should all say miss or just active?
+							soundMiss(i); 
 						}
                     drawGamefieldUpdate(i, clientState.game.players[i].gamefield, j, 0);
                 }
@@ -1545,7 +1559,6 @@ void main(void)
         }
 
         if (should_auto_poll_game()) {
-            /* Q during opponent turn -- 1.00.89 tester feedback */
             {
                 int pk = read_input_key();
                 if (pk == 'q' || pk == 'Q') {
@@ -1556,19 +1569,15 @@ void main(void)
                 }
             }
             pause(LOBBY_READY_POLL_PAUSE);
-            if (clientState.game.status == STATUS_GAMESTART)
-                set_ui_message("Starting...");
-            else if (clientState.game.status == STATUS_PLACE_SHIPS)
-                set_ui_message("Wait place...");
-            else
-                set_ui_message("Wait turn...");
-            draw_game_status_line();
+
             memcpy(&prev_game, &clientState.game, sizeof(Game));
             rc = apiCall("state");
             if (rc == API_CALL_SUCCESS) {
                 note_state_result_context();
                 clear_ui_message();
-                print_transition_snapshot("STATE");
+                
+                print_transition_snapshot("STATE"); 
+                
                 if (!redraw_gameplay_delta(&prev_game))
                     draw_status_block();
             } else {
@@ -1581,16 +1590,14 @@ void main(void)
 
         ensure_manual_placement();
 
-        if (clientState.game.status == STATUS_LOBBY) {
-            while (!kbhit())
-                pause(1);
-            key = cgetc();
-        } else {
-            key = wait_input_key();
+		if (!can_auto_place() && should_auto_poll_game()) {
+            continue;
         }
 
+		key = wait_input_key();
+
         if (clientState.game.status == STATUS_GAMEOVER) {
-            if (key == 'q' || key == 'Q') {
+            if (key == 'q' || key == 'Q' || key == KEY_RETURN) {
                 flush_keys();
                 if (!return_to_lobby_after_leave())
                     break;
@@ -1642,23 +1649,6 @@ void main(void)
             break;
         }
 
-        if (can_auto_place() && (key == 'r' || key == 'R')) {
-            uint8_t size;
-            uint8_t next;
-            uint8_t old_preview_pos = placement_preview_pos;
-            uint8_t old_ship_index = shipPlaceIndex;
-
-            flush_keys();
-            size = shipSize[shipPlaceIndex];
-            next = (uint8_t)((placement_preview_pos >= 100 ? placement_preview_pos - 100 : placement_preview_pos + 100));
-            placement_preview_pos = next_valid_manual_pos(size, next);
-            clear_ui_message();
-            nabu_placement_preview_pos = placement_preview_pos;
-            redraw_manual_placement_preview(old_preview_pos, old_ship_index, 1);
-            settle_keys();
-            continue;
-        }
-
         if (key == 'r' || key == 'R') {
             flush_keys();
             if (clientState.game.status == STATUS_LOBBY)
@@ -1704,6 +1694,7 @@ void main(void)
                 draw_game_status_line();
             }
             if (can_auto_place()) {
+				moved = 1;
                 auto_place_ships();
                 memcpy(&prev_game, &clientState.game, sizeof(Game));
                 rc = send_and_refresh(tempBuffer);
@@ -1717,12 +1708,12 @@ void main(void)
                 }
                 settle_keys_long();
             } else {
-                settle_keys();
+               settle_keys();
             }
             continue;
         }
 
-        if (can_auto_place() && shipPlaceIndex < 5 &&
+        /* if (can_auto_place() && shipPlaceIndex < 5 &&
             (is_up_key(key) || is_down_key(key) || is_left_key(key) || is_right_key(key))) {
             uint8_t size = shipSize[shipPlaceIndex];
             uint8_t x = (uint8_t)(placement_preview_pos % 10);
@@ -1749,8 +1740,8 @@ void main(void)
             redraw_manual_placement_preview(old_preview_pos, old_ship_index, 1);
             settle_keys();
             continue;
-        }
-
+        } */
+		
         if (is_up_key(key)) {
             aim_y = (uint8_t)((aim_y + 9) % 10);
             moved = 1;
@@ -1763,7 +1754,7 @@ void main(void)
         } else if (is_right_key(key)) {
             aim_x = (uint8_t)((aim_x + 1) % 10);
             moved = 1;
-        } else if (key == ' ') {
+        } else if (key == KEY_SPACEBAR || key == KEY_RETURN) {
             flush_keys();
             if (clientState.game.status == STATUS_LOBBY) {
                 draw_stage_screen("Sending ready...");
@@ -1778,7 +1769,7 @@ void main(void)
                 continue;
             }
 
-            if (can_auto_place() && shipPlaceIndex < 5) {
+            /* if (can_auto_place() && shipPlaceIndex < 5) {
                 uint8_t old_preview_pos = placement_preview_pos;
                 uint8_t old_ship_index = shipPlaceIndex;
 
@@ -1810,7 +1801,7 @@ void main(void)
                 }
                 settle_keys();
                 continue;
-            }
+            } */
 
             if (can_attack_now()) {
                 pending_local_attack = 1;

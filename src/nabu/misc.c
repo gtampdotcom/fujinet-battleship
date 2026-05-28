@@ -5,7 +5,7 @@
  * 
  ******************************************************************/
 
-#include "nabu/misc.h"
+#include "../misc.h"
 
 InputStruct input;
 uint8_t _lastJoy, _joy, _joySameCount = 10;
@@ -157,7 +157,7 @@ void loadPrefs()
     if (read_appkey(AK_CREATOR_ID, AK_APP_ID, AK_KEY_PREFS, tempBuffer))
     {
         memcpy(&prefs, tempBuffer, sizeof(prefs));
-
+		
         if (prefs.debugFlag == 0xff)
         {
             strcpy(serverEndpoint, localServer);
