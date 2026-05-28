@@ -33,8 +33,7 @@ uint16_t nabu_fetch_url(const char *url, uint8_t *buf, uint16_t max_len); /* net
 #define LC_BG           1   /* black background */
 
 /* Globals the shared game code expects the platform to supply */
-//char serverEndpoint[50] = "https://battleship.carr-designs.com/";  /* game server base URL */
-char serverEndpoint[50] = "http://127.0.0.1:8080/";  /* game server base URL */
+char serverEndpoint[50] = "https://battleship.carr-designs.com/";  /* game server base URL */
 char localServer[] = "http://127.0.0.1:8080/";                     /* local testing URL */
 char query[50] = "";                                               /* URL query string, built from lobby */
 char playerName[12] = "";                                          /* player name from lobby */
