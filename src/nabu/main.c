@@ -679,9 +679,12 @@ static void draw_graphics_gameplay(void)
                     drawLegendShip(i, j, shipSize[j], clientState.game.players[i].shipsLeft[j]);
             }
         }
-
-        if (can_attack_now() && target_valid)
-            drawGamefieldCursor(target, aim_x, aim_y, clientState.game.players[target].gamefield, 0);
+		
+		/* Cursor on all opponent boards -- 3/4-player mirrors CoCo layout. */
+        if (can_attack_now()) {
+            for (i = 1; i < clientState.game.playerCount && i < PLAYER_MAX; ++i)
+                drawGamefieldCursor(i, aim_x, aim_y, clientState.game.players[i].gamefield, 0);
+        }
 
         return;
     }
@@ -869,6 +872,7 @@ static void print_transition_snapshot(const char *label)
 static void redraw_attack_cursor_only(uint8_t old_x, uint8_t old_y)
 {
     uint8_t target;
+    uint8_t i;
 
     if (!can_attack_now()) {
         draw_status_block();
@@ -881,11 +885,20 @@ static void redraw_attack_cursor_only(uint8_t old_x, uint8_t old_y)
         return;
     }
 
-    /* quadrant from target -- 1.00.89 tester feedback - Fixed forgotten (fixed) location
-       with target - Dave noted miss located hits */
-    drawGamefieldUpdate(target, clientState.game.players[target].gamefield,
-                        (uint8_t)(old_y * 10 + old_x), 0);
-    drawGamefieldCursor(target, aim_x, aim_y, clientState.game.players[target].gamefield, 0);
+    if (clientState.game.playerCount > 2) {
+        /* 3/4-player: erase and redraw cursor on all opponent boards. */
+        for (i = 1; i < clientState.game.playerCount && i < PLAYER_MAX; ++i) {
+            drawGamefieldUpdate(i, clientState.game.players[i].gamefield,
+                                (uint8_t)(old_y * 10 + old_x), 0);
+            drawGamefieldCursor(i, aim_x, aim_y, clientState.game.players[i].gamefield, 0);
+        }
+    } else {
+        /* quadrant from target -- 1.00.89 tester feedback - Fixed forgotten (fixed) location
+           with target - Dave noted miss located hits */
+        drawGamefieldUpdate(target, clientState.game.players[target].gamefield,
+                            (uint8_t)(old_y * 10 + old_x), 0);
+        drawGamefieldCursor(target, aim_x, aim_y, clientState.game.players[target].gamefield, 0);
+    }
 }
 
 /* redraw only changed cells -- 1.00.86 */
@@ -952,9 +965,11 @@ static uint8_t redraw_gameplay_delta(const Game *old_game)
         if (old_can_attack && old_target < PLAYER_MAX)
             drawGamefieldUpdate(old_target, clientState.game.players[old_target].gamefield,
                                 (uint8_t)(aim_y * 10 + aim_x), 0);
-        if (new_can_attack && new_target < PLAYER_MAX)
-            drawGamefieldCursor(new_target, aim_x, aim_y,
-                                clientState.game.players[new_target].gamefield, 0);
+        if (new_can_attack) {
+            for (i = 1; i < clientState.game.playerCount && i < PLAYER_MAX; ++i)
+                drawGamefieldCursor(i, aim_x, aim_y,
+                                    clientState.game.players[i].gamefield, 0);
+        }
     } else {
         if (old_target != new_target)
             return 0;
