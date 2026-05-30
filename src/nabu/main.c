@@ -1382,7 +1382,7 @@ static uint8_t run_mini_lobby(void)
             }
 
             name_len = (uint8_t)strlen(playerName);
-            if (key == KEY_BACKSPACE) {
+            if (key == 0x08 || key == 0x7F) {
                 if (name_len > 0) playerName[--name_len] = 0;
             } else if (key >= ' ' && key < 127 && name_len < 8) {
                 playerName[name_len] = (char)key;
